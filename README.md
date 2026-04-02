@@ -1,3 +1,83 @@
+## GeoQuiz
+A database-driven quiz application built with Next.js and PostgreSQL.
+This project focuses on backend architecture, relational database design, and API-driven gameplay flow.
+
+## Testbruker:
+testbruker
+test123!
+
+The main goal is to practice 
+- Relational database modeling (ER design)
+- REST API design
+- Session-based quiz logic
+- Backend–frontend interaction
+- State machine & flow modeling
+- Clean separation between UI and data layer
+
+## Tech Stack
+- Next.js (App Router)
+- Node.js
+- PostgreSQL
+- pg (node-postgres)
+- Custom REST API routes
+- Flow & state modeling using diagrams
+
+## Core Architecture
+The application follows a structured flow:
+- User logs in (optionally)
+- User selects:
+    - gamemode
+    - region
+    - category (multiple selection support)
+    - question count (later scaling includes difficulty)
+- Backend creates a session
+    - if logged in: as user
+    - if not logged in: as guest
+- Questions are fetched and game session created with questions and their respective answers
+- User answers questions
+- Backend validates answers
+- Session score is calculated
+- Final result is returned
+
+The gameplay logic is session-based.
+
+## Database Design
+Tables:
+- users
+- user_auth
+- auth_session
+- game_session
+- region
+- category
+- question
+- answer_option
+- session_category
+- session_question
+- session_answer
+
+The database is fully relational with foreign keys and composite keys.
+See /documentation/ for ER diagrams and modeling notes.
+
+## API Overview
+
+List categories: GET /api/categories
+
+List quizzes in category: GET /api/categories/:id/quizzes
+
+Create session: POST /api/sessions
+
+Fetch questions: GET /api/quizzes/:id/questions
+
+Submit answer: POST /api/sessions/:id/answer
+
+Finalize session: POST /api/sessions/:id/finalize
+
+## Gameplay Flow
+
+See /documentation/STATE_AND_FLOW.md for complete state machine and swim-lane flowchart
+
+-----
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
