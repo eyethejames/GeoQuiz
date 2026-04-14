@@ -6,21 +6,21 @@ import { useEffect, useState } from "react";
 
 type Option = { optionId: number; text: string };
 type Question = { questionId: number; prompt: string; options: Option[] };
+
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
 export default function PlayPage() {
   const searchParams = useSearchParams();
-  const quizIdParam = searchParams.get("quizId");
-  const quizId = Number(quizIdParam);
-  const hasValidQuizId = Number.isInteger(quizId) && quizId > 0;
+  const sessionIdParam = searchParams.get("sessionId");
+  const sessionId = Number(sessionIdParam);
+  const hasValidSessionId = Number.isInteger(sessionId) && sessionId > 0;
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [index, setIndex] = useState(0);
 
-  const [sessionId, setSessionId] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [feedback, setFeedback] = useState<null | { correct: boolean }>(null);
   const [finalizing, setFinalizing] = useState(false);
@@ -31,10 +31,11 @@ export default function PlayPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function init() {
-      if (!hasValidQuizId) {
+    async function loadSessionQuestions() {
+
+      if (!hasValidSessionId) {
         setLoading(false);
-        setError("Missing or invalid quizId. Go back and select a quiz.");
+        setError("Could not find a valid quiz session. Please try again.");
         return;
       }
 
@@ -43,7 +44,6 @@ export default function PlayPage() {
         setError(null);
         setQuestions([]);
         setIndex(0);
-        setSessionId(null);
         setScore(0);
         setFeedback(null);
         setFinalizing(false);
@@ -52,23 +52,14 @@ export default function PlayPage() {
         setFinishedAt(null);
         setFinalizeAttempt(0);
 
-        // 1) Fetch quiz (questions + options)
-        const quizRes = await fetch(`/api/quizzes/${quizId}/questions`);
-        if (!quizRes.ok) throw new Error(`Quiz fetch failed: ${quizRes.status}`);
-        const quizData = await quizRes.json();
+        const res = await fetch(`/api/sessions/${sessionId}/questions`);
+        if (!res.ok) {
+          throw new Error(`Fetching questions failed: ${res.status}`)
+        }
 
-        setQuestions(quizData.questions ?? []);
+        const data = await res.json();
+        setQuestions(data.questions ?? []);
 
-        // 2) Create session
-        const sessionRes = await fetch(`/api/sessions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quizId }),
-        });
-        if (!sessionRes.ok) throw new Error(`Session create failed: ${sessionRes.status}`);
-        const sessionData = await sessionRes.json();
-
-        setSessionId(sessionData.sessionId);
       } catch (error: unknown) {
         setError(getErrorMessage(error));
       } finally {
@@ -76,12 +67,12 @@ export default function PlayPage() {
       }
     }
 
-    init();
-  }, [hasValidQuizId, quizId]);
+    loadSessionQuestions();
+  }, [hasValidSessionId, sessionId]);
 
   useEffect(() => {
     async function finalizeSession() {
-      if (!sessionId) return;
+      if (!hasValidSessionId) return;
       if (questions.length === 0) return;
       if (index < questions.length) return;
       if (finalized || finalizing) return;
@@ -93,14 +84,20 @@ export default function PlayPage() {
         const res = await fetch(`/api/sessions/${sessionId}/finalize`, {
           method: "POST",
         });
-        if (!res.ok) throw new Error(`Finalize failed: ${res.status}`);
+
+        if (!res.ok) {
+          throw new Error(`Finalize failed: ${res.status}`);
+        }
 
         const data = await res.json();
+
         if (typeof data.score === "number") {
           setScore(data.score);
         }
+
         setFinishedAt(typeof data.finishedAt === "string" ? data.finishedAt : null);
         setFinalized(true);
+
       } catch (error: unknown) {
         setFinalizeError(getErrorMessage(error));
       } finally {
@@ -109,13 +106,12 @@ export default function PlayPage() {
     }
 
     finalizeSession();
-  }, [finalizeAttempt, finalized, finalizing, index, questions.length, sessionId]);
+  }, [hasValidSessionId, sessionId, finalizeAttempt, finalized, finalizing, index, questions.length]);
 
   async function answer(optionId: number) {
-    if (!sessionId) return;
 
     const q = questions[index];
-    if (!q) return;
+    if (!q || !hasValidSessionId) return;
 
     setFeedback(null);
     setError(null);
@@ -127,7 +123,9 @@ export default function PlayPage() {
         body: JSON.stringify({ questionId: q.questionId, selectedOptionId: optionId }),
       });
 
-      if (!res.ok) throw new Error(`Answer failed: ${res.status}`);
+      if (!res.ok) {
+        throw new Error(`Answer failed: ${res.status}`);
+      }
 
       const data = await res.json();
       setFeedback({ correct: !!data.correct });
@@ -153,7 +151,7 @@ export default function PlayPage() {
         <h1>Play</h1>
         <p style={{ color: "crimson" }}>{error}</p>
         <p style={{ marginTop: 12 }}>
-          <Link href="/">Back to quiz selection</Link>
+          <Link href="/geoquiz">Back to quiz selection</Link>
         </p>
       </main>
     );
@@ -164,6 +162,9 @@ export default function PlayPage() {
       <main style={{ padding: 24 }}>
         <h1>Play</h1>
         <p>Ingen spørsmål funnet.</p>
+        <p style={{ marginTop: 12 }}>
+          <Link href="/geoquiz">Back to quiz selection</Link>
+        </p>
       </main>
     );
   }
@@ -195,7 +196,7 @@ export default function PlayPage() {
           </>
         )}
         <p style={{ marginTop: 12 }}>
-          <Link href="/">Play another quiz</Link>
+          <Link href="/geoquiz">Play another quiz</Link>
         </p>
       </main>
     );
@@ -204,39 +205,43 @@ export default function PlayPage() {
   const q = questions[index];
 
   return (
-    <main style={{ padding: 24, maxWidth: 720 }}>
-      <h1>GeoQuiz</h1>
-      <p>Session: {sessionId ?? "?"} · Score: {score}</p>
+    <main style={{
+      minHeight: "10vh", padding: 24, display: "flex", justifyContent: "center", alignItems: "center",
+    }}>
+      <div style={{ width: "100%", maxWidth: 820 }}>
+        <h1>GeoQuiz</h1>
+        <p>Session: {sessionId ?? "?"} · Score: {score}</p>
 
-      <div style={{ marginTop: 16, padding: 16, border: "1px solid #ddd", borderRadius: 10 }}>
-        <p style={{ margin: 0, opacity: 0.7 }}>
-          Spørsmål {index + 1} / {questions.length}
-        </p>
-        <h2 style={{ marginTop: 8 }}>{q.prompt}</h2>
-
-        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-          {q.options.map((opt) => (
-            <button
-              key={opt.optionId}
-              onClick={() => answer(opt.optionId)}
-              style={{
-                padding: "10px 12px",
-                textAlign: "left",
-                borderRadius: 10,
-                border: "1px solid #ccc",
-                cursor: "pointer",
-              }}
-            >
-              {opt.text}
-            </button>
-          ))}
-        </div>
-
-        {feedback && (
-          <p style={{ marginTop: 12, fontWeight: 600 }}>
-            {feedback.correct ? "✅ Riktig!" : "❌ Feil!"}
+        <div style={{ marginTop: 16, padding: 16, border: "1px solid #ddd", borderRadius: 10 }}>
+          <p style={{ margin: 0, opacity: 0.7 }}>
+            Spørsmål {index + 1} / {questions.length}
           </p>
-        )}
+          <h2 style={{ marginTop: 8 }}>{q.prompt}</h2>
+
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            {q.options.map((opt) => (
+              <button
+                key={opt.optionId}
+                onClick={() => answer(opt.optionId)}
+                style={{
+                  padding: "10px 12px",
+                  textAlign: "left",
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                  cursor: "pointer",
+                }}
+              >
+                {opt.text}
+              </button>
+            ))}
+          </div>
+
+          {feedback && (
+            <p style={{ marginTop: 12, fontWeight: 600 }}>
+              {feedback.correct ? "✅ Riktig!" : "❌ Feil!"}
+            </p>
+          )}
+        </div>
       </div>
     </main>
   );

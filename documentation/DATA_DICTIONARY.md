@@ -105,3 +105,9 @@ Derived:
 - current question index
 - completion percentage
 - pass/fail (if implemented later)
+
+## ACID-prinsipper
+A - Atomicity: Alt eller ingenting
+C - Consistency: Gyldig data
+I - Isolation: Samtidige queries påvirker ikke hverandres feil
+D - Durability: Data lagres permanent
